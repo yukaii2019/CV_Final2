@@ -10,14 +10,14 @@ learning_curv_dir="../log-${time}/curv"
 check_point_root="../log-${time}/checkpoints"
 log_root="../log-${time}"
 
-#batch_size=20
+batch_size=20
 #batch_size=200
-batch_size=200
+#batch_size=200
 lr=0.001
 num_epochs=200
-m1=50
-m2=100
-m3=150
+m1=12
+m2=24
+m3=36
 if [ ! -d "../train-${time}" ]; then
 mkdir -p ../log-${time}/{checkpoints,python_backups,val_imgs,curv}
 fi

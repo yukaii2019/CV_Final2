@@ -16,7 +16,7 @@ from module import *
 from data import get_dataloader
 from logger import logger
 from utils import *
-from loss import get_ptLoss, get_segLoss, get_seg2ptLoss, normPts
+from loss import get_ptLoss, get_segLoss, get_seg2ptLoss, normPts, get_ellmask_loss
 
 class Trainer:
     def __init__(self, args):
@@ -56,8 +56,8 @@ class Trainer:
 
         self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=args.milestones, gamma=0.1)
         
-        self.train_loss_list = {'total': [], 'seg2pt': [], 'seg': [], 'ellipse': [], 'exist': []}
-        self.val_loss_list = {'total': [], 'seg2pt': [], 'seg': [], 'ellipse': [], 'exist': []}
+        self.train_loss_list = {'total': [], 'seg2pt': [], 'seg': [], 'ellipse': [], 'exist': [], 'ellmask': []}
+        self.val_loss_list = {'total': [], 'seg2pt': [], 'seg': [], 'ellipse': [], 'exist': [], 'ellmask': []}
         self.val_score_list = {'wiou': [], 'atnr': [], 'score': []}
 
     def plot_learning_curve(self, result_list, name='train'):
@@ -88,7 +88,8 @@ class Trainer:
         image = images.cpu().detach().numpy()[0][0]
         image = (255*image).astype(np.uint8)
 
-        h, w = image.shape[0], image.shape[1]
+        h, w = pred_mask.shape[0], pred_mask.shape[1]
+        image = cv2.resize(image, (w, h), interpolation=cv2.INTER_CUBIC) 
 
         pred_pos = pred_pos.cpu().detach().numpy()[0]
         pred_pos = pred_pos * np.array([w, h, h/2, w/2, 1]) # x y h w
@@ -106,6 +107,7 @@ class Trainer:
         total_seg_loss = 0.0
         total_ellipse_loss = 0.0
         total_exist_loss = 0.0
+        total_ellmask_loss = 0.0
         # train_loss_1 = 0.0
         # train_loss_2 = 0.0
         
@@ -125,8 +127,9 @@ class Trainer:
             l_seg = get_segLoss(pred_mask, mask, conf.unsqueeze(1), self.beta)
             l_ellipse = get_ptLoss(pred_pos, pos, conf.unsqueeze(1))
             l_exist = self.criterion2(pred_exist, conf)
+            l_ellmask = get_ellmask_loss(pred_pos, mask, conf)
 
-            loss = l_seg2pt_pup + 20*l_seg + 10*l_ellipse * 5*l_exist
+            loss = l_seg2pt_pup + 20*l_seg + 10*l_ellipse + 5*l_exist + 5*l_ellmask
             
             self.optimizer.zero_grad()
             loss.backward()
@@ -137,6 +140,7 @@ class Trainer:
             total_seg_loss += l_seg.item()
             total_ellipse_loss += l_ellipse.item()
             total_exist_loss += l_exist.item() 
+            total_ellmask_loss += l_ellmask.item() 
 
             # train_loss_1 += loss_1.item() 
             # train_loss_2 += loss_2.item() 
@@ -147,20 +151,21 @@ class Trainer:
         total_seg_loss /= len(self.train_loader)
         total_ellipse_loss /= len(self.train_loader)
         total_exist_loss /= len(self.train_loader)
+        total_ellmask_loss /= len(self.train_loader)
 
         # train_loss_1 /= len(self.train_loader)
         # train_loss_2 /= len(self.train_loader)
         
 
-
         # logger.info(f'[{self.epoch + 1}/{self.args.num_epochs}] Train Loss: {train_loss:.5f} | Train Loss1: {train_loss_1:.5f} | Train Loss2: {train_loss_2:.5f}')
-        logger.info(f'[{self.epoch + 1}/{self.args.num_epochs}] Train Loss: {total_loss:.5f} | l_seg2pt_pup: {total_seg2pt_pup_loss:.5f} | l_seg: {total_seg_loss:.5f} | l_ellipse: {total_ellipse_loss:.5f} | l_exist: {total_exist_loss:.5f}')
+        logger.info(f'[{self.epoch + 1}/{self.args.num_epochs}] Train Loss: {total_loss:.5f} | l_seg2pt_pup: {total_seg2pt_pup_loss:.5f} | l_seg: {total_seg_loss:.5f} | l_ellipse: {total_ellipse_loss:.5f} | l_exist: {total_exist_loss:.5f} | l_ellmask: {total_ellmask_loss:.5f}')
 
         self.train_loss_list['total'].append(total_loss)
         self.train_loss_list['seg2pt'].append(total_seg2pt_pup_loss)
         self.train_loss_list['seg'].append(total_seg_loss)
         self.train_loss_list['ellipse'].append(total_ellipse_loss)
         self.train_loss_list['exist'].append(total_exist_loss)
+        self.train_loss_list['ellmask'].append(total_exist_loss)
     
         self.visualize(pred_mask, pred_pos, images, name='train')
 
@@ -189,6 +194,7 @@ class Trainer:
         total_seg_loss = 0.0
         total_ellipse_loss = 0.0
         total_exist_loss = 0.0
+        total_ellmask_loss = 0.0
         # val_loss_1 = 0.0
         # val_loss_2 = 0.0
 
@@ -196,35 +202,38 @@ class Trainer:
         self.label_validity = []
         self.iou_meter = AverageMeter()
 
-        for batch, data in tqdm.tqdm(enumerate(self.val_loader), total = len(self.val_loader), ncols=80, leave=False):
+        with torch.no_grad():
 
-            
-            images, mask, pos, conf = data['images'].to(self.device), data['mask'].to(self.device), data['pos'].to(self.device), data['conf'].to(self.device)
-            
-            with torch.no_grad():
+            for batch, data in tqdm.tqdm(enumerate(self.val_loader), total = len(self.val_loader), ncols=80, leave=False):
+
+
+                images, mask, pos, conf = data['images'].to(self.device), data['mask'].to(self.device), data['pos'].to(self.device), data['conf'].to(self.device)
+
                 pred_mask, pred_pos, pred_exist = self.model(images)
 
-            l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(pred_mask[:, 1, ...], normPts(pos[:,0:2]), temperature=4)
-            l_seg2pt_pup = torch.mean(l_seg2pt_pup)
-            l_seg = get_segLoss(pred_mask, mask, conf.unsqueeze(1), self.beta)
-            l_ellipse = get_ptLoss(pred_pos, pos, conf.unsqueeze(1))
-            l_exist = self.criterion2(pred_exist, conf)
-            
-            loss = l_seg2pt_pup + 20*l_seg + 10*l_ellipse * 5*l_exist
+                l_seg2pt_pup, pred_c_seg_pup = get_seg2ptLoss(pred_mask[:, 1, ...], normPts(pos[:,0:2]), temperature=4)
+                l_seg2pt_pup = torch.mean(l_seg2pt_pup)
+                l_seg = get_segLoss(pred_mask, mask, conf.unsqueeze(1), self.beta)
+                l_ellipse = get_ptLoss(pred_pos, pos, conf.unsqueeze(1))
+                l_exist = self.criterion2(pred_exist, conf)
+                l_ellmask = get_ellmask_loss(pred_pos, mask, conf)
 
-            # loss_1 = self.criterion1(pred_pos, pos)
-            # loss_2 = self.criterion2(pred_mask, mask) 
-            # loss = 0.2*loss_1 + 0.8*loss_2
+                loss = l_seg2pt_pup + 20*l_seg + 10*l_ellipse + 5*l_exist + 5*l_ellmask
 
-            total_loss += loss.item()
-            total_seg2pt_pup_loss += l_seg2pt_pup.item()
-            total_seg_loss += l_seg.item()
-            total_ellipse_loss += l_ellipse.item()
-            total_exist_loss += l_exist.item() 
-            # val_loss_1 += loss_1.item()
-            # val_loss_2 += loss_2.item()
+                # loss_1 = self.criterion1(pred_pos, pos)
+                # loss_2 = self.criterion2(pred_mask, mask) 
+                # loss = 0.2*loss_1 + 0.8*loss_2
 
-            self.benchmark(pred_mask, pred_exist , mask, conf)
+                total_loss += loss.item()
+                total_seg2pt_pup_loss += l_seg2pt_pup.item()
+                total_seg_loss += l_seg.item()
+                total_ellipse_loss += l_ellipse.item()
+                total_exist_loss += l_exist.item() 
+                total_ellmask_loss += l_ellmask.item() 
+                # val_loss_1 += loss_1.item()
+                # val_loss_2 += loss_2.item()
+
+                self.benchmark(pred_mask, pred_exist , mask, conf)
 
 
         total_loss /=   len(self.val_loader)
@@ -232,20 +241,22 @@ class Trainer:
         total_seg_loss /= len(self.val_loader)
         total_ellipse_loss /= len(self.val_loader)
         total_exist_loss /= len(self.val_loader)
+        total_ellmask_loss /= len(self.val_loader)
 
         # val_loss_1 /= len(self.val_loader)
         # val_loss_2 /= len(self.val_loader)
         
         # logger.info(f'[{self.epoch + 1}/{self.args.num_epochs}] Val  Loss: {val_loss:.5f} | Val Loss1: {val_loss_1:.5f} | Val Loss2: {val_loss_2:.5f}')
         #logger.info(f'[{self.epoch + 1}/{self.args.num_epochs}] Val  Loss: {val_loss:.5f} | l_seg2pt_pup: {l_seg2pt_pup:.5f} | l_seg: {l_seg:.5f} | l_ellipse: {l_ellipse:.5f}') 
-        logger.info(f'[{self.epoch + 1}/{self.args.num_epochs}] Val  Loss: {total_loss:.5f} | l_seg2pt_pup: {total_seg2pt_pup_loss:.5f} | l_seg: {total_seg_loss:.5f} | l_ellipse: {total_ellipse_loss:.5f} | l_exist: {total_exist_loss:.5f}')
+        logger.info(f'[{self.epoch + 1}/{self.args.num_epochs}] Val  Loss: {total_loss:.5f} | l_seg2pt_pup: {total_seg2pt_pup_loss:.5f} | l_seg: {total_seg_loss:.5f} | l_ellipse: {total_ellipse_loss:.5f} | l_exist: {total_exist_loss:.5f} | l_ellmask: {total_ellmask_loss:.5f}')
 
         self.val_loss_list['total'].append(total_loss)
         self.val_loss_list['seg2pt'].append(total_seg2pt_pup_loss)
         self.val_loss_list['seg'].append(total_seg_loss)
         self.val_loss_list['ellipse'].append(total_ellipse_loss)
         self.val_loss_list['exist'].append(total_exist_loss)
-        
+        self.val_loss_list['ellmask'].append(total_exist_loss)
+
         tn_rates = true_negative_curve(np.array(self.output_conf), np.array(self.label_validity))
         wiou = self.iou_meter.avg()
         atnr = np.mean(tn_rates)

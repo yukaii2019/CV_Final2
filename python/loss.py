@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
 import copy
+import cv2
+from utils import mask_iou
 def create_meshgrid(
         height: int,
         width: int,
@@ -235,6 +237,39 @@ class ptLoss(nn.Module):
         # loss = (mask * loss) 
         # return torch.sum(loss/torch.sum(mask.to(torch.float32)))
 
+def get_ellmask_loss(pred_pos, target, mask):
+    """
+    ellparm.shape [B, 5]
+    target.shape [B, H,W]
+    mask.shape [B,1]
+    """
+    B = target.shape[0]
+    h, w = target.shape[1], target.shape[2]
+
+    loss_ellmask = []
+
+
+    pred_pos = torch.clone(pred_pos).cpu().detach().numpy()
+    target = torch.clone(target).cpu().detach().numpy()
+    pred_pos = pred_pos * np.array([w, h, h/2, w/2, 1]) # x y h w
+
+    for i in range(0, B):
+        if mask[i] == 1:
+            center_coordinates = (int(np.clip(pred_pos[i][0], 0, w)), int(np.clip(pred_pos[i][1], 0, h)))
+            axesLength = (int(np.clip(pred_pos[i][3], 0, w/2)), int(np.clip(pred_pos[i][2], 0, h/2)))
+            angle = np.arcsin(pred_pos[i][4]) * (180 / np.pi)
+            
+            pred_ell_mask = np.zeros((h,w), dtype=np.uint8)
+            pred_ell_mask = cv2.ellipse(pred_ell_mask, center_coordinates, axesLength, angle, 0, 360, 255, -1) 
+ 
+            iou = mask_iou(pred_ell_mask, target[i])
+            loss_ellmask.append(iou)
+
+    if len(loss_ellmask) > 0:
+        return torch.sum((1-torch.tensor(loss_ellmask)))/torch.sum(mask.to(torch.float32))
+    else:
+        return torch.tensor(0)
+
 if __name__ == '__main__':
 
     device = torch.device('cuda')
@@ -278,3 +313,7 @@ if __name__ == '__main__':
     a = torch.tensor(0)
     print(a)
     print(torch.tensor(0).item())
+
+
+    l_ellmask = get_ellmask_loss(elOut[:,:5], target, loc_onlyMask)
+    print(l_ellmask)

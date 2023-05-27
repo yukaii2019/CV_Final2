@@ -77,8 +77,8 @@ class mydataset(Dataset):
             pos = torch.tensor(data[:-1]).contiguous()
             conf = torch.tensor(data[-1]).contiguous()
 
-            img = transforms.Resize((48, 64))(img)
-            mask = transforms.Resize((48, 64))(mask)
+            img = transforms.Resize((192, 256))(img)
+            #mask = transforms.Resize((192, 256))(mask)
 
             ###########failure augmentations###########
             # r = transforms.RandomRotation.get_params((-10, 10))
@@ -112,15 +112,20 @@ class mydataset(Dataset):
                 'images': img,
                 'mask': mask,
                 'pos': pos,
-                'conf': conf 
+                'conf': conf,
+                'fn': self.image_names[index] 
             }
 
         else:
-            pass
-            # img = Image.open(self.image_names[index])
-            # return {
-            #     'images': img, 
-            # }
+            fn_img = os.path.join(self.dataset_dir , self.image_names[index]+".jpg")
+            img = Image.open(fn_img).convert('L')
+            img = transforms.functional.pil_to_tensor(img)
+            img = transforms.Resize((192, 256))(img)
+            img = (img / 255).to(torch.float32)
+            return {
+                'images': img, 
+                'fn': self.image_names[index] 
+            }
 
 
 def imshow(inp, fn=None, mul255 = False):

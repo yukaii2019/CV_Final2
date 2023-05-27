@@ -223,6 +223,7 @@ class DenseNet2D(nn.Module):
         self.classfier = classifier(self.sizes) 
         self._initialize_weights()
 
+        self.interpolate = nn.Upsample(size=(480, 640), mode='bilinear')
 
     def setDatasetInfo(self, numSets=2):
         # Produces a 1 layered MLP which directly maps bottleneck to the DS ID
@@ -258,6 +259,8 @@ class DenseNet2D(nn.Module):
         elOut = self.elReg(x) # Linear regression to ellipse parameters
         pul_exist = self.classfier(x)
         op = self.dec(x4, x3, x2, x1, x)
+
+        op = self.interpolate(op)
 
         return op, elOut, pul_exist 
 
@@ -362,8 +365,8 @@ if __name__ == '__main__':
     model = DenseNet2D()
 
     B = 3
-    H = 480
-    W = 640
+    H = 192
+    W = 256
 
     x = torch.rand(B, 1, H, W)
 
