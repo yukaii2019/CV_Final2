@@ -220,7 +220,7 @@ class DenseNet2D(nn.Module):
         self.enc = DenseNet_encoder(in_c=1, chz=chz, actfunc=actfunc, growth=growth, norm=norm)
         self.dec = DenseNet_decoder(chz=chz, out_c=2, actfunc=actfunc, growth=growth, norm=norm)
         self.elReg = regressionModule(self.sizes)
-
+        self.classfier = classifier(self.sizes) 
         self._initialize_weights()
 
 
@@ -256,9 +256,51 @@ class DenseNet2D(nn.Module):
         x4, x3, x2, x1, x = self.enc(x)
         latent = torch.mean(x.flatten(start_dim=2), -1) # [B, features]
         elOut = self.elReg(x) # Linear regression to ellipse parameters
+        pul_exist = self.classfier(x)
         op = self.dec(x4, x3, x2, x1, x)
 
-        return op, elOut 
+        return op, elOut, pul_exist 
+
+class classifier(torch.nn.Module):
+    def __init__(self, sizes):
+        super(classifier, self).__init__()
+        inChannels = sizes['enc']['op'][-1] 
+        self.max_pool = nn.AvgPool2d(kernel_size=2)
+
+        self.c1 = nn.Conv2d(in_channels=inChannels,
+                            out_channels=64,
+                            bias=True,
+                            kernel_size=3,
+                            padding=1)
+
+        self.c2 = nn.Conv2d(in_channels=64,
+                            out_channels=64,
+                            bias=True,
+                            kernel_size=3,
+                            padding=1)
+
+        self.c3 = nn.Conv2d(in_channels=64+inChannels,
+                            out_channels=32,
+                            kernel_size=1,
+                            bias=True)
+
+        self.l1 = nn.Linear(32, 2, bias=True)
+
+        self.bn1 = nn.BatchNorm2d(num_features=inChannels)
+        self.bn2 = nn.BatchNorm2d(num_features=64+inChannels)
+
+    def forward(self, x):
+        B = x.shape[0]
+        p = self.bn1(x)
+        p = self.c1(p)
+        p = self.c2(p)
+        x = torch.cat([x, p], dim=1)
+        x = self.bn2(x)
+        x = self.c3(x)
+        x = self.l1(x.reshape(B, 32, -1).sum(dim=-1))
+        return x
+
+
 
 class regressionModule(torch.nn.Module):
     def __init__(self, sizes):
@@ -288,8 +330,9 @@ class regressionModule(torch.nn.Module):
         self.bn1 = nn.BatchNorm2d(num_features=inChannels)
         self.bn2 = nn.BatchNorm2d(num_features=64+inChannels)
 
-        self.c_actfunc = F.hardtanh # Center has to be between -1 and 1
-        self.param_actfunc = F.hardtanh # Parameters can't be negative and capped to 1
+        self.xy_actfunc = F.hardtanh # Center has to be between -1 and 1
+        self.hw_actfunc = F.hardtanh # Parameters can't be negative and capped to 1
+        self.t_actfunc  = F.hardtanh # Parameters can't be negative and capped to 1
 
     def forward(self, x):
         # x: [B, C, 15, 20]
@@ -305,9 +348,9 @@ class regressionModule(torch.nn.Module):
 
         EPS = 1e-5
 
-        pup_c = self.c_actfunc(x[:, 0:2], min_val=-1+EPS, max_val=1-EPS)
-        pup_param = self.param_actfunc(x[:, 2:4], min_val=0+EPS, max_val=1-EPS)
-        pup_angle = x[:, 4]
+        pup_c     = self.xy_actfunc(x[:, 0:2], min_val=0+EPS, max_val=1-EPS)
+        pup_param = self.hw_actfunc(x[:, 2:4], min_val=0+EPS, max_val=1-EPS)
+        pup_angle = self.t_actfunc (x[:, 4], min_val=-1+EPS, max_val=1-EPS)
 
         op = torch.cat([pup_c,
                         pup_param,
@@ -324,7 +367,9 @@ if __name__ == '__main__':
 
     x = torch.rand(B, 1, H, W)
 
-    op, elOut  = model.forward(x)
+    op, elOut, pul_exist = model.forward(x)
 
+    print(pul_exist)
     print(op.shape)
     print(elOut.shape)
+    print(pul_exist.shape)

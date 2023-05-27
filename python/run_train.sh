@@ -1,7 +1,7 @@
 time=$(date '+%Y%m%d%H%M%S')
 
 ## input file
-dataset_dir="/home/ykhsieh/CV/final/dataset/open_eye"
+dataset_dir="/home/ykhsieh/CV/final/dataset/"
 label_data="/home/ykhsieh/CV/final/dataset/data.json"
 
 ## output file
@@ -10,9 +10,11 @@ learning_curv_dir="../log-${time}/curv"
 check_point_root="../log-${time}/checkpoints"
 log_root="../log-${time}"
 
+#batch_size=20
+#batch_size=200
 batch_size=200
-lr=0.0001
-num_epochs=150
+lr=0.001
+num_epochs=200
 m1=50
 m2=100
 m3=150
@@ -23,6 +25,8 @@ fi
 cp trainer.py ../log-${time}/python_backups
 cp module.py ../log-${time}/python_backups
 cp data.py ../log-${time}/python_backups
+cp loss.py ../log-${time}/python_backups
+cp utils.py ../log-${time}/python_backups
 cp run_train.sh ../log-${time}/python_backups 
 
 train_bin="python3 train.py "

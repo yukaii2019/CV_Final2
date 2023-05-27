@@ -75,6 +75,7 @@ class mydataset(Dataset):
             img = transforms.functional.pil_to_tensor(img)
             mask = transforms.ToTensor()(mask)           
             pos = torch.tensor(data[:-1]).contiguous()
+            conf = torch.tensor(data[-1]).contiguous()
 
             img = transforms.Resize((48, 64))(img)
             mask = transforms.Resize((48, 64))(mask)
@@ -105,11 +106,13 @@ class mydataset(Dataset):
             img = (img / 255).to(torch.float32)
             mask = mask.to(int)
             pos = pos.to(torch.float32)
+            conf = conf.to(int)
 
             return {
                 'images': img,
                 'mask': mask,
-                'pos': pos
+                'pos': pos,
+                'conf': conf 
             }
 
         else:
@@ -132,11 +135,12 @@ if __name__ == '__main__':
     data = iter(train_loader).next()
 
 
-    print(data['images'].shape, data['mask'].shape, data['pos'].shape)
+    print(data['images'].shape, data['mask'].shape, data['pos'].shape, data['conf'].shape)
 
     images = data['images']
     mask = data['mask'] 
     pred_pos = data['pos']
+    conf = data['conf']
 
     images = images.cpu().numpy()
     images = (255*images).astype(np.uint8)
