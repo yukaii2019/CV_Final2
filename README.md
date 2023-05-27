@@ -23,8 +23,8 @@ bash run_inference.sh
 * 角度要注意弧度跟角度的轉換
 
 # 可能可以實驗的地方
-* 把loss的比例調一調，有些loss可能根本沒用，或者有提升效果
-* 目前只有train在training set上，然後用validation set來驗證，可以改成跑全部dataset下去train一次應該會更好
+* 把loss的比例調一調，有些loss可能根本沒用，或者有提升效果 (train_epoch跟val_epoch兩個function要一起改)
+* 目前只有train在training set上，然後用validation set來驗證，目前這樣可以在20 epoch左右train到wiou: 0.9743, atnr: 0.9990, score: 0.9817，可以改成跑全部dataset下去train一次應該會更好
 * data augmentation的部分目前沒做，有嘗試用過但還沒用好，主要是不知道橢圓的參數會因為旋轉或flip產生什麼變化
 * 做data augmentation可以跑data.py，應該會生出可以看的圖
 
