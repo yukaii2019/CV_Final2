@@ -2,10 +2,10 @@ time=$(date '+%Y%m%d%H%M%S')
 
 ## input file
 dataset_path="/home/ykhsieh/CV/final/dataset/"
-checkpoint_path="/home/ykhsieh/CV/final/SEG2/log-20230527192313/checkpoints/model_best_9817.pth"
+checkpoint_path="/home/ykhsieh/CV/final/SEG2/log-20230529113854/checkpoints/model_best_982660.pth"
 
 ## output file
-output_path="/home/ykhsieh/CV/final/output5"
+output_path="/home/ykhsieh/CV/final/output8"
 
 bin="python3 inference.py "
 CUDA_VISIBLE_DEVICES=0 $bin \

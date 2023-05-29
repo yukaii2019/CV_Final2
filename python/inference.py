@@ -42,18 +42,18 @@ def main(args):
                     fn_img = os.path.join(image_folder, f'{idx}.jpg')
                     img = Image.open(fn_img).convert('L')
                     img = transforms.functional.pil_to_tensor(img)
-                    img = transforms.Resize((192, 256))(img)
+                    img = transforms.Resize((240, 320))(img)
                     img = (img / 255).to(torch.float32).to(device).unsqueeze(0)
 
                     
-                    pred_mask, _, pred_exist = model(img)
+                    #pred_mask, _, pred_exist = model(img)
+                    pred_mask, pred_exist = model(img)
 
                     pred_mask = pred_mask.max(1, keepdim=False)[1].cpu().detach().numpy()
                     pred_exist = pred_exist.max(1, keepdim=False)[1].cpu().detach().numpy()
 
                     
                     pred_mask = (255*pred_mask).astype(np.uint8).transpose(1,2,0)
-                    #pred_mask = cv2.resize(pred_mask, (640, 480), interpolation=cv2.INTER_CUBIC)  
                     
                     cv2.imwrite(os.path.join(args.output_path, subject, f'{action_number + 1:02d}', f'{idx}.png'), pred_mask)
 

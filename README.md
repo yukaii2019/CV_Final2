@@ -28,3 +28,16 @@ bash run_inference.sh
 * data augmentation的部分目前沒做，有嘗試用過但還沒用好，主要是不知道橢圓的參數會因為旋轉或flip產生什麼變化
 * 做data augmentation可以跑data.py，應該會生出可以看的圖
 
+# 5/29 更新
+* input改成240 * 320，但結果其實沒有太大變化
+* 移除regression module，發現對結果沒有什麼影響
+* loss 的部分，只剩下三個。移除的兩個都是regression module那邊的。
+* 加了一些augmentation有讓結果有稍微提升。
+
+# 之後可能方向
+* 換其他model試試可能是transformer的等等
+* 我沒試過分離classifier，不知道效果如何，另外classifier的cross entropy loss可能可以加weight看看，
+* 後處理inference的圖片(可以用opencv的東西直接把output強制變橢圓)，因為我看了一下結果很多segmentation出來形狀有點怪有稍微試過幾張變橢圓看來結果有機會更好。
+* 這份code還是沒有用全部dataset下去train，沒有validate的話可能要試試看要用哪種loss下去選。
+
+* loss 的部分我查了滿多的，我覺得應該沒什麼可用的了。Accurate CNN-based pupil segmentation with an ellipse fit error regularization term 這篇github的loss我認為是不會work的，跟我之前寫的那個loss一樣的問題。

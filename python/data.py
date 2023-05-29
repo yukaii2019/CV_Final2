@@ -77,30 +77,38 @@ class mydataset(Dataset):
             pos = torch.tensor(data[:-1]).contiguous()
             conf = torch.tensor(data[-1]).contiguous()
 
-            img = transforms.Resize((192, 256))(img)
+            img = transforms.Resize((240, 320))(img)
             #mask = transforms.Resize((192, 256))(mask)
 
-            ###########failure augmentations###########
-            # r = transforms.RandomRotation.get_params((-10, 10))
-            # img = TF.rotate(img, r)
-            # mask = TF.rotate(mask, r)
-            # pos[4] += r
-            # pos[0] = (pos[0]-0.5) * np.cos(r*np.pi/180.) - (0.5-pos[1])*np.sin(r*np.pi/180.) + 0.5
-            # pos[1] = 0.5 - ((pos[0]-0.5) * np.sin(r*np.pi/180.) + (0.5-pos[1])*np.cos(r*np.pi/180.))
+            if self.split == 'train':
+                # random gaussian blur
+                if random.random() < 0.5:
+                    img = transforms.GaussianBlur(3, sigma=(2, 7))(img)
 
-            # i, j, h, w = transforms.RandomCrop.get_params(img, output_size=(192, 256))
-            # img = TF.crop(img, i, j, h, w)
-            # mask = TF.crop(mask, i, j, h, w)
+                # random gamma correction 
+                if random.random() < 0.5:
+                    img = transforms.functional.adjust_gamma(img, random.choice([0.6, 0.8, 1.2, 1.4]))
 
-            # if random.random() > 0.5:
-            #     img = TF.hflip(img)
-            #     mask = TF.hflip(mask)
-            #     pos[0] = 1 - pos[0] 
+                
+                # random rotate
+                r = transforms.RandomRotation.get_params((-20, 20))
+                img = TF.rotate(img, r)
+                mask = TF.rotate(mask, r)
+                # only adjust center. the rotation angle (pos[4]) will also change, but it is not used in training.
+                pos[0] = (pos[0]-0.5) * np.cos(r*np.pi/180.) - (0.5-pos[1])*np.sin(r*np.pi/180.) + 0.5
+                pos[1] = 0.5 - ((pos[0]-0.5) * np.sin(r*np.pi/180.) + (0.5-pos[1])*np.cos(r*np.pi/180.))
+                
+                
+                # random horizontal flip
+                if random.random() < 0.5:
+                    img = TF.hflip(img)
+                    mask = TF.hflip(mask)
+                    pos[0] = 1 - pos[0] 
 
-            # if random.random() > 0.5:
-            #     img = TF.vflip(img)
-            #     mask = TF.vflip(mask)
-            #     pos[1] = 1 - pos[1] 
+                # if random.random() > 0.5:
+                #     img = TF.vflip(img)
+                #     mask = TF.vflip(mask)
+                #     pos[1] = 1 - pos[1] 
 
             mask = torch.squeeze(mask, 0)
             img = (img / 255).to(torch.float32)
@@ -113,7 +121,6 @@ class mydataset(Dataset):
                 'mask': mask,
                 'pos': pos,
                 'conf': conf,
-                'fn': self.image_names[index] 
             }
 
         else:
@@ -124,7 +131,6 @@ class mydataset(Dataset):
             img = (img / 255).to(torch.float32)
             return {
                 'images': img, 
-                'fn': self.image_names[index] 
             }
 
 
